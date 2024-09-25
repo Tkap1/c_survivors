@@ -5,12 +5,10 @@
 #define invalid_default_case default: { assert(false); }
 #define array_count(arr) (sizeof((arr)) / sizeof((arr[0])))
 
-// #define for_enemy_simd_partial(index_name) for(int index_name = g_game.enemy_arr.index_data.min_index / 4; index_name < g_game.enemy_arr.index_data.max_index_plus_one; index_name += 4)
 #define for_enemy_partial(index_name) for(int index_name = g_game.enemy_arr.index_data.min_index; index_name < g_game.enemy_arr.index_data.max_index_plus_one; index_name += 1)
-
-// #define for_projectile_simd_partial(index_name) for(int index_name = g_game.projectile_arr.index_data.min_index / 4; index_name < g_game.projectile_arr.index_data.max_index_plus_one; index_name += 4)
 #define for_projectile_partial(index_name) for(int index_name = g_game.projectile_arr.index_data.min_index; index_name < g_game.projectile_arr.index_data.max_index_plus_one; index_name += 1)
-#define for_pickup_partial(index_name) for(int index_name = g_game.pickup_arr.index_data.min_index; index_name < g_game.pickup_arr.index_data.max_index_plus_one; index_name += 1)
+#define for_inactive_pickup_partial(index_name) for(int index_name = g_game.inactive_pickup_arr.index_data.min_index; index_name < g_game.inactive_pickup_arr.index_data.max_index_plus_one; index_name += 1)
+#define for_active_pickup_partial(index_name) for(int index_name = g_game.active_pickup_arr.index_data.min_index; index_name < g_game.active_pickup_arr.index_data.max_index_plus_one; index_name += 1)
 
 
 typedef struct s_v2
@@ -187,18 +185,25 @@ typedef struct s_enemy_arr
 	s_v2 dir[c_max_entities];
 } s_enemy_arr;
 
-typedef struct s_pickup_arr
+typedef struct s_inactive_pickup_arr
 {
 	s_entity_index_data index_data;
 	bool active[c_max_entities];
 
-	bool following_player[c_max_entities];
+	int exp_to_give[c_max_entities];
+	s_v2 pos[c_max_entities];
+} s_inactive_pickup_arr;
+
+typedef struct s_active_pickup_arr
+{
+	s_entity_index_data index_data;
+	bool active[c_max_entities];
+
 	int exp_to_give[c_max_entities];
 	f32 speed[c_max_entities];
 	s_v2 prev_pos[c_max_entities];
 	s_v2 pos[c_max_entities];
-	s_v2 dir[c_max_entities];
-} s_pickup_arr;
+} s_active_pickup_arr;
 
 typedef struct s_projectile_arr
 {
@@ -232,9 +237,11 @@ typedef struct s_entity_id
 typedef struct s_game
 {
 	s_v2 enemy_cell_min_bounds;
-	s_v2 pickup_cell_min_bounds;
+	s_v2 inactive_pickup_cell_min_bounds;
+	s_v2 active_pickup_cell_min_bounds;
 	s_entity_id* enemy_cell_arr[c_max_cells][c_max_cells];
-	s_entity_id* pickup_cell_arr[c_max_cells][c_max_cells];
+	s_entity_id* inactive_pickup_cell_arr[c_max_cells][c_max_cells];
+	s_entity_id* active_pickup_cell_arr[c_max_cells][c_max_cells];
 	s_camera camera;
 	s64 next_entity_id;
 	s_rng rng;
@@ -248,7 +255,8 @@ typedef struct s_game
 	int spawn_timer;
 	s_player player;
 	s_enemy_arr enemy_arr;
-	s_pickup_arr pickup_arr;
+	s_inactive_pickup_arr inactive_pickup_arr;
+	s_active_pickup_arr active_pickup_arr;
 	s_projectile_arr projectile_arr;
 	bool key_down_arr[SDL_SCANCODE_COUNT];
 } s_game;
@@ -325,4 +333,7 @@ func int array_get_count(void* in_arr);
 func int id_to_enemy(s_entity_id id);
 func void draw_rect_center_camera(s_v2 pos, s_v2 size, s_rgb color, s_camera camera);
 func int id_to_pickup(s_entity_id id);
-func bool circle_vs_rect_center(s_v2 center, s_v2 in_radius, s_v2 rect_pos, s_v2 rect_size);
+func bool circle_vs_rect_center(s_v2 center, float radius, s_v2 rect_pos, s_v2 rect_size);
+func int id_to_inactive_pickup(s_entity_id id);
+func int id_to_active_pickup(s_entity_id id);
+func int make_entity(bool* active_arr, s_entity_index_data* index_data);

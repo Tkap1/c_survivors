@@ -41,12 +41,12 @@ func bool get_enemy_in_cells(s_cell_iterator* it, s_v2 pos, s_v2 size)
 	return false;
 }
 
-func bool get_pickup_in_cells(s_cell_iterator* it, s_v2 pos, s_v2 size, bool(*collision_func)(s_v2 pos0, s_v2 size0, s_v2 pos1, s_v2 size1))
+func bool get_inactive_pickup_in_cells(s_cell_iterator* it, s_v2 pos, float radius)
 {
-	s_pickup_arr* pickup_arr = &g_game.pickup_arr;
+	s_inactive_pickup_arr* inactive_pickup_arr = &g_game.inactive_pickup_arr;
 
-	int x_index = floorfi((pos.x - g_game.pickup_cell_min_bounds.x) / c_cell_size);
-	int y_index = floorfi((pos.y - g_game.pickup_cell_min_bounds.y) / c_cell_size);
+	int x_index = floorfi((pos.x - g_game.inactive_pickup_cell_min_bounds.x) / c_cell_size);
+	int y_index = floorfi((pos.y - g_game.inactive_pickup_cell_min_bounds.y) / c_cell_size);
 
 	for(int y = it->y; y <= 1; y += 1) {
 		for(int x = it->x; x <= 1; x += 1) {
@@ -54,14 +54,48 @@ func bool get_pickup_in_cells(s_cell_iterator* it, s_v2 pos, s_v2 size, bool(*co
 			int yy = y_index + y;
 			if(xx < 0 || xx >= c_max_cells) { return false; }
 			if(yy < 0 || yy >= c_max_cells) { return false; }
-			s_entity_id* arr = g_game.pickup_cell_arr[yy][xx];
+			s_entity_id* arr = g_game.inactive_pickup_cell_arr[yy][xx];
 			int count = array_get_count(arr);
 			for(int id_i = it->id_index; id_i < count; id_i += 1) {
 				it->id_index = id_i + 1;
-				int pickup = id_to_pickup(arr[id_i]);
-				if(pickup >= 0) {
-					if(collision_func(pos, size, pickup_arr->pos[pickup], c_exp_size)) {
-						it->index = pickup;
+				int inactive_pickup = id_to_inactive_pickup(arr[id_i]);
+				if(inactive_pickup >= 0) {
+					if(circle_vs_rect_center(pos, radius, inactive_pickup_arr->pos[inactive_pickup], c_exp_size)) {
+						it->index = inactive_pickup;
+						return true;
+					}
+				}
+			}
+			it->id_index = 0;
+			it->x = x + 1;
+		}
+		it->y = y + 1;
+		it->x = -1;
+	}
+	return false;
+}
+
+func bool get_active_pickup_in_cells(s_cell_iterator* it, s_v2 pos, s_v2 size)
+{
+	s_active_pickup_arr* active_pickup_arr = &g_game.active_pickup_arr;
+
+	int x_index = floorfi((pos.x - g_game.active_pickup_cell_min_bounds.x) / c_cell_size);
+	int y_index = floorfi((pos.y - g_game.active_pickup_cell_min_bounds.y) / c_cell_size);
+
+	for(int y = it->y; y <= 1; y += 1) {
+		for(int x = it->x; x <= 1; x += 1) {
+			int xx = x_index + x;
+			int yy = y_index + y;
+			if(xx < 0 || xx >= c_max_cells) { return false; }
+			if(yy < 0 || yy >= c_max_cells) { return false; }
+			s_entity_id* arr = g_game.active_pickup_cell_arr[yy][xx];
+			int count = array_get_count(arr);
+			for(int id_i = it->id_index; id_i < count; id_i += 1) {
+				it->id_index = id_i + 1;
+				int active_pickup = id_to_active_pickup(arr[id_i]);
+				if(active_pickup >= 0) {
+					if(rect_vs_rect_center(pos, size, active_pickup_arr->pos[active_pickup], c_exp_size)) {
+						it->index = active_pickup;
 						return true;
 					}
 				}
