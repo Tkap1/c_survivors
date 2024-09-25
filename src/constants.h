@@ -24,6 +24,7 @@ typedef double f64;
 #define c_half_pi (c_pi * 0.5f)
 #define c_tau 6.2831853071f
 #define c_max_pierces 8
+#define c_pickup_trigger_radius 96
 
 // @Note(tkap, 25/09/2024): Careful changing this
 #define c_cell_area (c_window_width * 2)

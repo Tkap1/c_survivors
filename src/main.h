@@ -231,7 +231,10 @@ typedef struct s_entity_id
 
 typedef struct s_game
 {
-	s_entity_id* cell_arr[c_max_cells][c_max_cells];
+	s_v2 enemy_cell_min_bounds;
+	s_v2 pickup_cell_min_bounds;
+	s_entity_id* enemy_cell_arr[c_max_cells][c_max_cells];
+	s_entity_id* pickup_cell_arr[c_max_cells][c_max_cells];
 	s_camera camera;
 	s64 next_entity_id;
 	s_rng rng;
@@ -283,8 +286,8 @@ func void circular_index_add(int* index, int to_add, int size);
 func f64 at_most_f64(f64 a, f64 b);
 func bool is_on_screen_center(s_v2 pos, s_v2 size);
 func s_v2 v2_scale(s_v2 out, f32 scale);
-func bool rect_collides_rect_topleft(s_v2 pos0, s_v2 size0, s_v2 pos1, s_v2 size1);
-func bool rect_collides_rect_center(s_v2 pos0, s_v2 size0, s_v2 pos1, s_v2 size1);
+func bool rect_vs_rect_topleft(s_v2 pos0, s_v2 size0, s_v2 pos1, s_v2 size1);
+func bool rect_vs_rect_center(s_v2 pos0, s_v2 size0, s_v2 pos1, s_v2 size1);
 func bool entities_collide(int a, int b);
 func s_v2 v2_sub_scale(s_v2 a, s_v2 b, float scale);
 func void remove_entity(int entity, bool* active_arr, s_entity_index_data* index_data);
@@ -318,3 +321,8 @@ func void* arena_get(int bytes, s_linear_arena* arena);
 func s_v2 v2_add(s_v2 a, s_v2 b);
 func void array_add(void** in_arr, void* new_element, s_linear_arena* arena);
 func void* make_dynamic_array(int element_size, int initial_capacity, s_linear_arena* arena);
+func int array_get_count(void* in_arr);
+func int id_to_enemy(s_entity_id id);
+func void draw_rect_center_camera(s_v2 pos, s_v2 size, s_rgb color, s_camera camera);
+func int id_to_pickup(s_entity_id id);
+func bool circle_vs_rect_center(s_v2 center, s_v2 in_radius, s_v2 rect_pos, s_v2 rect_size);

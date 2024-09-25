@@ -14,6 +14,7 @@
 #include "SDL3/SDL.h"
 #include "constants.h"
 #include "rng.h"
+#include "cells.h"
 #include "main.h"
 
 global SDL_Renderer* g_renderer = null;
@@ -28,6 +29,7 @@ global int g_time_count;
 
 #include "rng.c"
 #include "simd.c"
+#include "cells.c"
 
 int main(void)
 {
@@ -135,10 +137,13 @@ func void init_game(void)
 	g_game.speed_index = 5;
 
 	add_weapon(&g_game.player, e_weapon_giant_club);
+	g_game.player.weapon_arr[e_weapon_giant_club].level = 20;
 }
 
 func void update(void)
 {
+	g_time_count = 0;
+
 	s_enemy_arr* enemy_arr = &g_game.enemy_arr;
 	s_projectile_arr* projectile_arr = &g_game.projectile_arr;
 	s_pickup_arr* pickup_arr = &g_game.pickup_arr;
@@ -154,7 +159,7 @@ func void update(void)
 	g_game.spawn_timer += 1;
 	if(g_game.spawn_timer >= 3) {
 		g_game.spawn_timer = 0;
-		float angle = randf32(&g_game.rng) * c_tau;
+		f32 angle = randf32(&g_game.rng) * c_tau;
 		s_v2 pos = v2(
 			cosf(angle) * c_window_width * 0.6f,
 			sinf(angle) * c_window_width * 0.6f
@@ -170,18 +175,21 @@ func void update(void)
 		}
 	}
 
-	// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		build spatial partition start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+	// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		build enemy cell spatial partition start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 	{
 		for(int y = 0; y < c_max_cells; y += 1) {
 			for(int x = 0; x < c_max_cells; x += 1) {
-				g_game.cell_arr[y][x] = make_dynamic_array(sizeof(s_entity_id), 4, &g_arena);
+				g_game.enemy_cell_arr[y][x] = make_dynamic_array(sizeof(s_entity_id), 4, &g_arena);
 			}
 		}
 		s_v2 center = g_game.player.pos;
 		float half_area_size = c_cell_area * 0.5f;
 		s_v2 min_bounds = v2_sub(center, v2_1(half_area_size));
+		g_game.enemy_cell_min_bounds = min_bounds;
 		for_enemy_partial(i) {
 			if(!enemy_arr->active[i]) { continue; }
+			assert(get_enemy_type_property(i, size).x < c_cell_size * 2);
+			assert(get_enemy_type_property(i, size).y < c_cell_size * 2);
 			s_v2 pos = enemy_arr->pos[i];
 			int x_index = floorfi((pos.x - min_bounds.x) / c_cell_size);
 			int y_index = floorfi((pos.y - min_bounds.y) / c_cell_size);
@@ -190,10 +198,35 @@ func void update(void)
 			s_entity_id id = zero;
 			id.index = i;
 			id.id = enemy_arr->id[i];
-			array_add(&g_game.cell_arr[y_index][x_index], &id, &g_arena);
+			array_add(&g_game.enemy_cell_arr[y_index][x_index], &id, &g_arena);
 		}
 	}
-	// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		build spatial partition end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+	// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		build enemy cell spatial partition end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+	// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		build pickup cell spatial partition start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+	{
+		for(int y = 0; y < c_max_cells; y += 1) {
+			for(int x = 0; x < c_max_cells; x += 1) {
+				g_game.pickup_cell_arr[y][x] = make_dynamic_array(sizeof(s_entity_id), 4, &g_arena);
+			}
+		}
+		s_v2 center = g_game.player.pos;
+		float half_area_size = c_cell_area * 0.5f;
+		s_v2 min_bounds = v2_sub(center, v2_1(half_area_size));
+		g_game.pickup_cell_min_bounds = min_bounds;
+		for_pickup_partial(i) {
+			if(!pickup_arr->active[i]) { continue; }
+			s_v2 pos = pickup_arr->pos[i];
+			int x_index = floorfi((pos.x - min_bounds.x) / c_cell_size);
+			int y_index = floorfi((pos.y - min_bounds.y) / c_cell_size);
+			if(x_index < 0 || x_index >= c_max_cells) { continue; }
+			if(y_index < 0 || y_index >= c_max_cells) { continue; }
+			s_entity_id id = zero;
+			id.index = i;
+			array_add(&g_game.pickup_cell_arr[y_index][x_index], &id, &g_arena);
+		}
+	}
+	// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		build pickup cell spatial partition end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 	memcpy(enemy_arr->prev_pos, enemy_arr->pos, sizeof(enemy_arr->prev_pos));
 	memcpy(projectile_arr->prev_pos, projectile_arr->pos, sizeof(projectile_arr->prev_pos));
@@ -222,27 +255,78 @@ func void update(void)
 	}
 	// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		player movement end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+	// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		pickup move start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+	{
+		for_pickup_partial(i) {
+			if(!pickup_arr->active[i]) { continue; }
+			if(pickup_arr->following_player[i]) {
+				s_v2 dir = v2_from_to_normalized(pickup_arr->pos[i], g_game.player.pos);
+				v2_add_scale_p(&pickup_arr->pos[i], dir, pickup_arr->speed[i]);
+				pickup_arr->speed[i] += 0.1f;
+			}
+		}
+	}
+	// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		pickup move end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 	// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		pickup start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-	for_pickup_partial(i) {
-		if(!pickup_arr->active[i]) { continue; }
-		if(pickup_arr->following_player[i]) {
-			s_v2 dir = v2_from_to_normalized(pickup_arr->pos[i], g_game.player.pos);
-			v2_add_scale_p(&pickup_arr->pos[i], dir, pickup_arr->speed[i]);
-			pickup_arr->speed[i] += 0.1f;
-			if(rect_collides_rect_center(g_game.player.pos, c_player_size, pickup_arr->pos[i], c_exp_size)) {
-				int leveled_up_count = add_exp(&g_game.player, pickup_arr->exp_to_give[i]);
+	{
+		u64 before = SDL_GetPerformanceCounter();
+
+		// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		trigger start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+		{
+			s_cell_iterator it = make_cell_iterator();
+			while(get_pickup_in_cells(&it, g_game.player.pos, v2_1(64), circle_vs_rect_center)) {
+				assert(pickup_arr->active[it.index]);
+				if(pickup_arr->following_player[it.index]) { continue; }
+
+				pickup_arr->following_player[it.index] = true;
+				s_v2 dir = v2_from_to_normalized(g_game.player.pos, pickup_arr->pos[it.index]);
+				v2_add_scale_p(&pickup_arr->pos[it.index], dir, 64);
+			}
+		}
+		// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		trigger end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+		// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		collide with player start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+		{
+			s_cell_iterator it = make_cell_iterator();
+			while(get_pickup_in_cells(&it, g_game.player.pos, v2_1(c_pickup_trigger_radius), rect_vs_rect_center)) {
+				assert(pickup_arr->active[it.index]);
+				if(!pickup_arr->following_player[it.index]) { continue; }
+
+				int leveled_up_count = add_exp(&g_game.player, pickup_arr->exp_to_give[it.index]);
 				g_game.level_up_triggers += leveled_up_count;
-				remove_entity(i, pickup_arr->active, &pickup_arr->index_data);
+				remove_entity(it.index, pickup_arr->active, &pickup_arr->index_data);
 			}
 		}
-		else {
-			f32 distance = v2_distance(g_game.player.pos, pickup_arr->pos[i]);
-			if(distance < 64) {
-				pickup_arr->following_player[i] = true;
-				s_v2 dir = v2_from_to_normalized(g_game.player.pos, pickup_arr->pos[i]);
-				v2_add_scale_p(&pickup_arr->pos[i], dir, 64);
+		// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		collide with player end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+		#if 0
+		for_pickup_partial(i) {
+			if(!pickup_arr->active[i]) { continue; }
+			if(pickup_arr->following_player[i]) {
+				s_v2 dir = v2_from_to_normalized(pickup_arr->pos[i], g_game.player.pos);
+				v2_add_scale_p(&pickup_arr->pos[i], dir, pickup_arr->speed[i]);
+				pickup_arr->speed[i] += 0.1f;
+				if(rect_collides_rect_center(g_game.player.pos, c_player_size, pickup_arr->pos[i], c_exp_size)) {
+					int leveled_up_count = add_exp(&g_game.player, pickup_arr->exp_to_give[i]);
+					g_game.level_up_triggers += leveled_up_count;
+					remove_entity(i, pickup_arr->active, &pickup_arr->index_data);
+				}
+			}
+			else {
+				f32 distance = v2_distance(g_game.player.pos, pickup_arr->pos[i]);
+				if(distance < 64) {
+					pickup_arr->following_player[i] = true;
+					s_v2 dir = v2_from_to_normalized(g_game.player.pos, pickup_arr->pos[i]);
+					v2_add_scale_p(&pickup_arr->pos[i], dir, 64);
+				}
 			}
 		}
+		#endif
+		u64 passed = SDL_GetPerformanceCounter() - before;
+		g_time_arr[g_time_count] = passed;
+		g_time_count += 1;
 	}
 	// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		pickup end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -257,34 +341,37 @@ func void update(void)
 	// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		enemy movement end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 	// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		projectile collision start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-	u64 before = SDL_GetPerformanceCounter();
-	for_projectile_partial(i) {
-		if(!projectile_arr->active[i]) { continue; }
-		assert(projectile_arr->pierce_count[i] <= c_max_pierces);
-		for_enemy_partial(enemy) {
-			if(!enemy_arr->active[enemy]) { continue; }
-			if(is_enemy_already_hit(projectile_arr->already_hit_arr[i], projectile_arr->already_hit_count[i], enemy)) { continue; }
+	{
+		u64 before = SDL_GetPerformanceCounter();
+		for_projectile_partial(i) {
+			if(!projectile_arr->active[i]) { continue; }
+			assert(projectile_arr->pierce_count[i] <= c_max_pierces);
 
-			if(rect_collides_rect_center(projectile_arr->pos[i], c_projectile_size, enemy_arr->pos[enemy], get_enemy_size(enemy))) {
+			s_v2 projectile_pos = projectile_arr->pos[i];
+			s_cell_iterator it = make_cell_iterator();
+			while(get_enemy_in_cells(&it, projectile_pos, c_projectile_size)) {
+				assert(enemy_arr->active[it.index]);
+				if(is_enemy_already_hit(projectile_arr->already_hit_arr[i], projectile_arr->already_hit_count[i], it.index)) { continue; }
+
 				s_v2 push_dir = v2_scale(projectile_arr->dir[i], 5.0f);
-				v2_add_p(&enemy_arr->pos[enemy], push_dir);
-				enemy_arr->damage_taken[enemy] += 1;
-				enemy_arr->last_hit_time[enemy] = multiplied_render_time;
-				if(enemy_arr->damage_taken[enemy] >= enemy_arr->max_health[enemy]) {
-					make_exp(enemy_arr->pos[enemy]);
-					remove_entity(enemy, enemy_arr->active, &enemy_arr->index_data);
+				v2_add_p(&enemy_arr->pos[it.index], push_dir);
+				enemy_arr->damage_taken[it.index] += 1;
+				enemy_arr->last_hit_time[it.index] = multiplied_render_time;
+				if(enemy_arr->damage_taken[it.index] >= enemy_arr->max_health[it.index]) {
+					make_exp(enemy_arr->pos[it.index]);
+					remove_entity(it.index, enemy_arr->active, &enemy_arr->index_data);
 				}
 				if(projectile_arr->pierce_count[i] <= 0) {
 					remove_entity(i, projectile_arr->active, &projectile_arr->index_data);
+					break;
 				}
 				projectile_arr->pierce_count[i] -= 1;
-				break;
 			}
 		}
+		u64 passed = SDL_GetPerformanceCounter() - before;
+		g_time_arr[g_time_count] = passed;
+		g_time_count += 1;
 	}
-	u64 passed = SDL_GetPerformanceCounter() - before;
-	g_time_arr[g_time_count] = passed;
-	g_time_count += 1;
 	// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		projectile collision end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 	// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		projectile movement start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
@@ -523,11 +610,16 @@ func void render(f32 interp_dt)
 	// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		weapon ui end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 	{
-		u64 t = g_time_arr[0];
-		f32 width = t / 100.0f;
-		s_v2 size = v2(width, 24.0f);
-		draw_rect_topleft(v2(0, 100), size, make_color_1(0.5f));
-		g_time_count = 0;
+		s_v2 pos = v2(0, 100);
+		for(int i = 0; i < g_time_count; i += 1) {
+			u64 t = g_time_arr[i];
+			f64 seconds = t / (f64)g_cycle_frequency;
+			f64 us = seconds * 1000000;
+			f32 width = (f32)(us / 100.0 * c_window_width);
+			s_v2 size = v2(width, 24.0f);
+			draw_rect_topleft(pos, size, make_color_1((i & 1) ? 0.5f : 0.25f));
+			pos.y += 28;
+		}
 	}
 
 	SDL_RenderPresent(g_renderer);
@@ -622,7 +714,6 @@ func int make_enemy(s_v2 pos, e_enemy_type type)
 	g_game.enemy_arr.prev_pos[entity] = pos;
 	g_game.enemy_arr.speed[entity] = 0.33f;
 	g_game.enemy_arr.damage_taken[entity] = 0;
-
 	g_game.enemy_arr.max_health[entity] = get_enemy_type_property(entity, max_health);
 
 	g_game.next_entity_id += 1;
@@ -812,7 +903,7 @@ func s_v2 v2_sub_scale(s_v2 a, s_v2 b, float scale)
 	return a;
 }
 
-func bool rect_collides_rect_topleft(s_v2 pos0, s_v2 size0, s_v2 pos1, s_v2 size1)
+func bool rect_vs_rect_topleft(s_v2 pos0, s_v2 size0, s_v2 pos1, s_v2 size1)
 {
 	return pos0.x + size0.x >= pos1.x &&
 		pos0.y + size0.y >= pos1.y &&
@@ -820,9 +911,9 @@ func bool rect_collides_rect_topleft(s_v2 pos0, s_v2 size0, s_v2 pos1, s_v2 size
 		pos0.y <= pos1.y + size1.y;
 }
 
-func bool rect_collides_rect_center(s_v2 pos0, s_v2 size0, s_v2 pos1, s_v2 size1)
+func bool rect_vs_rect_center(s_v2 pos0, s_v2 size0, s_v2 pos1, s_v2 size1)
 {
-	return rect_collides_rect_topleft(v2_sub_scale(pos0, size0, 0.5f), size0, v2_sub_scale(pos1, size1, 0.5f), size1);
+	return rect_vs_rect_topleft(v2_sub_scale(pos0, size0, 0.5f), size0, v2_sub_scale(pos1, size1, 0.5f), size1);
 }
 
 func void remove_entity(int entity, bool* active_arr, s_entity_index_data* index_data)
@@ -866,6 +957,13 @@ func void draw_rect_topleft(s_v2 pos, s_v2 size, s_rgb color)
 
 	SDL_SetRenderDrawColorFloat(g_renderer, color.r, color.g, color.b, 1);
 	SDL_RenderFillRect(g_renderer, &rect);
+}
+
+func void draw_rect_center_camera(s_v2 pos, s_v2 size, s_rgb color, s_camera camera)
+{
+	pos.x -= size.x * 0.5f;
+	pos.y -= size.y * 0.5f;
+	draw_rect_topleft_camera(pos, size, color, camera);
 }
 
 func void draw_rect_topleft_camera(s_v2 pos, s_v2 size, s_rgb color, s_camera camera)
@@ -1107,8 +1205,15 @@ func void array_add(void** in_arr, void* new_element, s_linear_arena* arena)
 		dynamic_data = new_header_ptr;
 		dynamic_data->capacity = new_capacity;
 	}
-	dynamic_data->count += 1;
 	memcpy(arr + dynamic_data->count * dynamic_data->element_size, new_element, dynamic_data->element_size);
+	dynamic_data->count += 1;
+}
+
+func int array_get_count(void* in_arr)
+{
+	u8* arr = in_arr;
+	s_dynamic_array_data* dynamic_data = (s_dynamic_array_data*)(arr - sizeof(s_dynamic_array_data));
+	return dynamic_data->count;
 }
 
 func void* arena_get(int bytes, s_linear_arena* arena)
@@ -1125,4 +1230,47 @@ func s_v2 v2_add(s_v2 a, s_v2 b)
 	a.x += b.x;
 	a.y += b.y;
 	return a;
+}
+
+func int id_to_enemy(s_entity_id id)
+{
+	s_enemy_arr* enemy_arr = &g_game.enemy_arr;
+	assert(id.id > 0);
+	assert(id.index >= 0);
+
+	if(enemy_arr->id[id.index] != id.id) { return -1; }
+	if(!enemy_arr->active[id.index]) { return -1; }
+	return id.index;
+}
+
+func int id_to_pickup(s_entity_id id)
+{
+	s_pickup_arr* pickup_arr = &g_game.pickup_arr;
+	assert(id.index >= 0);
+
+	if(!pickup_arr->active[id.index]) { return -1; }
+	return id.index;
+}
+
+func bool circle_vs_rect_center(s_v2 center, s_v2 in_radius, s_v2 rect_pos, s_v2 rect_size)
+{
+	bool collision = false;
+
+	f32 radius = in_radius.x;
+
+	f32 dx = fabsf(center.x - rect_pos.x);
+	f32 dy = fabsf(center.y - rect_pos.y);
+
+	if(dx > (rect_size.x/2.0f + radius)) { return false; }
+	if(dy > (rect_size.y/2.0f + radius)) { return false; }
+
+	if(dx <= (rect_size.x/2.0f)) { return true; }
+	if(dy <= (rect_size.y/2.0f)) { return true; }
+
+	f32 cornerDistanceSq = (dx - rect_size.x/2.0f)*(dx - rect_size.x/2.0f) +
+		(dy - rect_size.y/2.0f)*(dy - rect_size.y/2.0f);
+
+	collision = (cornerDistanceSq <= (radius*radius));
+
+	return collision;
 }
