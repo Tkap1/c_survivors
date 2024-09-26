@@ -9,6 +9,7 @@
 #define for_projectile_partial(index_name) for(int index_name = g_game.projectile_arr.index_data.min_index; index_name < g_game.projectile_arr.index_data.max_index_plus_one; index_name += 1)
 #define for_inactive_pickup_partial(index_name) for(int index_name = g_game.inactive_pickup_arr.index_data.min_index; index_name < g_game.inactive_pickup_arr.index_data.max_index_plus_one; index_name += 1)
 #define for_active_pickup_partial(index_name) for(int index_name = g_game.active_pickup_arr.index_data.min_index; index_name < g_game.active_pickup_arr.index_data.max_index_plus_one; index_name += 1)
+#define for_aoe_partial(index_name) for(int index_name = g_game.aoe_arr.index_data.min_index; index_name < g_game.aoe_arr.index_data.max_index_plus_one; index_name += 1)
 
 
 typedef struct s_v2
@@ -207,14 +208,28 @@ typedef struct s_active_pickup_arr
 	s_v2 pos[c_max_entities];
 } s_active_pickup_arr;
 
+typedef struct s_aoe_arr
+{
+	s_entity_index_data index_data;
+	bool active[c_max_entities];
+
+	SDL_Texture* texture[c_max_entities];
+	bool falling[c_max_entities];
+	int hit_timer[c_max_entities];
+	int ticks_left[c_max_entities];
+	s_v2 prev_pos[c_max_entities];
+	s_v2 pos[c_max_entities];
+	s_v2 size[c_max_entities];
+	s_v2 target_pos[c_max_entities];
+	f32 speed[c_max_entities];
+} s_aoe_arr;
+
 typedef struct s_projectile_arr
 {
 	s_entity_index_data index_data;
 	bool active[c_max_entities];
 
 	SDL_Texture* texture[c_max_entities];
-	bool timed_area[c_max_entities];
-	int hit_timer[c_max_entities];
 	int ticks_left[c_max_entities];
 	int pierce_count[c_max_entities];
 	int already_hit_count[c_max_entities];
@@ -264,6 +279,7 @@ typedef struct s_game
 	s_inactive_pickup_arr inactive_pickup_arr;
 	s_active_pickup_arr active_pickup_arr;
 	s_projectile_arr projectile_arr;
+	s_aoe_arr aoe_arr;
 	bool key_down_arr[SDL_SCANCODE_COUNT];
 } s_game;
 
@@ -344,3 +360,5 @@ func int id_to_inactive_pickup(s_entity_id id);
 func int id_to_active_pickup(s_entity_id id);
 func int make_entity(bool* active_arr, s_entity_index_data* index_data);
 func s_v2 v2_from_angle(float angle);
+func int make_aoe(s_v2 pos, s_v2 size, SDL_Texture* texture);
+func s_v2 move_towards_v2(s_v2 a, s_v2 b, float speed, float* out_distance);

@@ -149,6 +149,7 @@ func void update(void)
 	s_projectile_arr* projectile_arr = &g_game.projectile_arr;
 	s_inactive_pickup_arr* inactive_pickup_arr = &g_game.inactive_pickup_arr;
 	s_active_pickup_arr* active_pickup_arr = &g_game.active_pickup_arr;
+	s_aoe_arr* aoe_arr = &g_game.aoe_arr;
 
 	if(g_game.state1 == e_state1_default && g_game.level_up_triggers > 0) {
 		g_game.level_up_triggers -= 1;
@@ -257,6 +258,7 @@ func void update(void)
 
 	memcpy(enemy_arr->prev_pos, enemy_arr->pos, sizeof(enemy_arr->prev_pos));
 	memcpy(projectile_arr->prev_pos, projectile_arr->pos, sizeof(projectile_arr->prev_pos));
+	memcpy(aoe_arr->prev_pos, aoe_arr->pos, sizeof(aoe_arr->prev_pos));
 	memcpy(active_pickup_arr->prev_pos, active_pickup_arr->pos, sizeof(active_pickup_arr->prev_pos));
 
 	g_game.player.prev_pos = g_game.player.pos;
@@ -281,6 +283,47 @@ func void update(void)
 		v2_add_scale_p(&player->pos, movement, 4);
 	}
 	// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		player movement end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+	// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		move falling aoe start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+	for_aoe_partial(i) {
+		if(!aoe_arr->active[i]) { continue; }
+		if(aoe_arr->falling[i]) {
+			f32 distance = 0;
+			aoe_arr->pos[i] = move_towards_v2(aoe_arr->pos[i], aoe_arr->target_pos[i], aoe_arr->speed[i], &distance);
+			if(distance < 1) {
+				aoe_arr->falling[i] = false;
+			}
+		}
+	}
+	// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		move falling aoe end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+	// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		aoe damage enemies and expire start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+	for_aoe_partial(i) {
+		if(!aoe_arr->active[i]) { continue; }
+		if(aoe_arr->falling[i]) { continue; }
+
+		aoe_arr->hit_timer[i] -= 1;
+		if(aoe_arr->hit_timer[i] <= 0) {
+			aoe_arr->hit_timer[i] = 60;
+
+			s_cell_iterator it = zero;
+			while(get_enemy_in_cells(&it, aoe_arr->pos[i], aoe_arr->size[i])) {
+				assert(enemy_arr->active[it.index]);
+
+				enemy_arr->damage_taken[it.index] += 1;
+				enemy_arr->last_hit_time[it.index] = multiplied_render_time;
+				if(enemy_arr->damage_taken[it.index] >= enemy_arr->max_health[it.index]) {
+					make_exp(enemy_arr->pos[it.index]);
+					remove_entity(it.index, enemy_arr->active, &enemy_arr->index_data);
+				}
+			}
+		}
+		aoe_arr->ticks_left[i] -= 1;
+		if(aoe_arr->ticks_left[i] <= 0) {
+			remove_entity(i, aoe_arr->active, &aoe_arr->index_data);
+		}
+	}
+	// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		aoe damage enemies and expire end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 	// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		active pickup move start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 	{
@@ -379,13 +422,9 @@ func void update(void)
 
 			s_v2 projectile_pos = projectile_arr->pos[i];
 			s_cell_iterator it = zero;
-			bool timed_area = projectile_arr->timed_area[i];
-			bool can_hit = (timed_area && projectile_arr->hit_timer[i] <= 0) || !timed_area;
-			projectile_arr->hit_timer[i] -= 1;
-			if(can_hit) { projectile_arr->hit_timer[i] = 60; }
-			while(can_hit && get_enemy_in_cells(&it, projectile_pos, projectile_arr->size[i])) {
+			while(get_enemy_in_cells(&it, projectile_pos, projectile_arr->size[i])) {
 				assert(enemy_arr->active[it.index]);
-				if(!timed_area && is_enemy_already_hit(projectile_arr->already_hit_arr[i], projectile_arr->already_hit_count[i], it.index)) { continue; }
+				if(is_enemy_already_hit(projectile_arr->already_hit_arr[i], projectile_arr->already_hit_count[i], it.index)) { continue; }
 
 				s_v2 push_dir = v2_scale(projectile_arr->dir[i], 5.0f);
 				v2_add_p(&enemy_arr->pos[it.index], push_dir);
@@ -396,13 +435,11 @@ func void update(void)
 					remove_entity(it.index, enemy_arr->active, &enemy_arr->index_data);
 				}
 
-				if(!timed_area) {
-					if(projectile_arr->pierce_count[i] <= 0) {
-						remove_entity(i, projectile_arr->active, &projectile_arr->index_data);
-						break;
-					}
-					projectile_arr->pierce_count[i] -= 1;
+				if(projectile_arr->pierce_count[i] <= 0) {
+					remove_entity(i, projectile_arr->active, &projectile_arr->index_data);
+					break;
 				}
+				projectile_arr->pierce_count[i] -= 1;
 			}
 		}
 		u64 passed = SDL_GetPerformanceCounter() - before;
@@ -495,22 +532,28 @@ func void update(void)
 								}
 							}
 
-							s_v2 projectile_pos;
+							s_v2 aoe_target_pos;
 							if(enemy == -1) {
 								float x_angle = randf32(&g_game.rng) * c_tau;
 								float y_angle = randf32(&g_game.rng) * c_tau;
 								float x = cosf(x_angle);
 								float y = sinf(y_angle);
-								projectile_pos = v2_scale(v2(x, y), c_window_width * 0.2f);
-								v2_add_p(&projectile_pos, g_game.player.pos);
+								aoe_target_pos = v2_scale(v2(x, y), c_window_width * 0.2f);
+								v2_add_p(&aoe_target_pos, g_game.player.pos);
 							}
 							else {
-								projectile_pos = enemy_arr->pos[enemy];
+								aoe_target_pos = enemy_arr->pos[enemy];
 							}
 
-							int projectile = make_projectile(projectile_pos, v2_1(64), v2_1(0), g_texture_arr[g_weapon_data_arr[weapon_type].texture]);
-							projectile_arr->timed_area[projectile] = true;
-							projectile_arr->ticks_left[projectile] = 200;
+							float angle = randf_range(&g_game.rng, -c_pi * 0.25f, c_pi * 0.25f) - c_pi * 0.5f;
+							s_v2 aoe_pos = v2_scale(v2_from_angle(angle), 500);
+							v2_add_p(&aoe_pos, aoe_target_pos);
+
+							int aoe = make_aoe(aoe_pos, v2_1(64), g_texture_arr[g_weapon_data_arr[weapon_type].texture]);
+							aoe_arr->ticks_left[aoe] = 200;
+							aoe_arr->falling[aoe] = true;
+							aoe_arr->target_pos[aoe] = aoe_target_pos;
+							aoe_arr->speed[aoe] = 20;
 						}
 					} break;
 
@@ -544,6 +587,7 @@ func void render(f32 interp_dt)
 	s_projectile_arr* projectile_arr = &g_game.projectile_arr;
 	s_inactive_pickup_arr* inactive_pickup_arr = &g_game.inactive_pickup_arr;
 	s_active_pickup_arr* active_pickup_arr = &g_game.active_pickup_arr;
+	s_aoe_arr* aoe_arr = &g_game.aoe_arr;
 
 	{
 		s_player player = g_game.player;
@@ -577,6 +621,13 @@ func void render(f32 interp_dt)
 		}
 	}
 	// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		background end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+	for_aoe_partial(i) {
+		if(!aoe_arr->active[i]) { continue; }
+		s_v2 pos = lerp_v2(aoe_arr->prev_pos[i], aoe_arr->pos[i], interp_dt);
+		draw_texture_center_camera(pos, aoe_arr->size[i], make_color_1(1), aoe_arr->texture[i], g_game.camera);
+	}
 
 	for_enemy_partial(i) {
 		if(!enemy_arr->active[i]) { continue; }
@@ -800,9 +851,21 @@ func int make_projectile(s_v2 pos, s_v2 size, s_v2 dir, SDL_Texture* texture)
 	g_game.projectile_arr.ticks_left[entity] = 500;
 	g_game.projectile_arr.texture[entity] = texture;
 	g_game.projectile_arr.gravity[entity] = 0;
-	g_game.projectile_arr.timed_area[entity] = false;
-	g_game.projectile_arr.hit_timer[entity] = 0;
 	g_game.projectile_arr.size[entity] = size;
+	return entity;
+}
+
+func int make_aoe(s_v2 pos, s_v2 size, SDL_Texture* texture)
+{
+	int entity = make_entity(g_game.aoe_arr.active, &g_game.aoe_arr.index_data);
+	g_game.aoe_arr.pos[entity] = pos;
+	g_game.aoe_arr.prev_pos[entity] = pos;
+	g_game.aoe_arr.speed[entity] = 1;
+	g_game.aoe_arr.ticks_left[entity] = 500;
+	g_game.aoe_arr.texture[entity] = texture;
+	g_game.aoe_arr.hit_timer[entity] = 0;
+	g_game.aoe_arr.size[entity] = size;
+	g_game.aoe_arr.falling[entity] = false;
 	return entity;
 }
 
@@ -1171,7 +1234,7 @@ func s_v2 rand_v2_normalized(s_rng* rng)
 	return v2_normalized(v);
 }
 
-func f32 at_mostf32(float a, float b)
+func f32 at_most_f32(float a, float b)
 {
 	return a > b ? b : a;
 }
@@ -1182,7 +1245,7 @@ func f32 get_projectile_angle(int projectile_i, int num_projectiles)
 		return 0;
 	}
 	int c_projectiles_per_full_circle = 20;
-	f32 spread = at_mostf32(1.0f, (f32)num_projectiles / c_projectiles_per_full_circle);
+	f32 spread = at_most_f32(1.0f, (f32)num_projectiles / c_projectiles_per_full_circle);
 	f32 angle = (f32)projectile_i / (num_projectiles - 1) * spread;
 	angle -= spread / 2;
 	angle *= c_tau;
@@ -1382,4 +1445,17 @@ func bool circle_vs_rect_center(s_v2 center, float radius, s_v2 rect_pos, s_v2 r
 func s_v2 v2_from_angle(float angle)
 {
 	return v2(cosf(angle), sinf(angle));
+}
+
+func s_v2 move_towards_v2(s_v2 a, s_v2 b, float speed, float* out_distance)
+{
+	s_v2 dir = v2_from_to(a, b);
+	s_v2 dir_n = v2_normalized(dir);
+	float distance = v2_length(dir);
+	v2_scale_p(&dir_n, at_most_f32(distance, speed));
+	s_v2 result = v2_add(a, dir_n);
+	if(out_distance) {
+		*out_distance = v2_distance(result, b);
+	}
+	return result;
 }
