@@ -19,6 +19,7 @@
 
 global SDL_Renderer* g_renderer = null;
 global f32 g_delta = 0;
+global f32 g_multiplied_delta = 0;
 global u64 g_start_cycles = 0;
 global u64 g_cycle_frequency = 0;
 global s_game g_game = zero;
@@ -64,6 +65,7 @@ int main(void)
 		u64 passed = now - time_before;
 		f64 delta64 = (passed / (f64)g_cycle_frequency);
 		g_delta = (f32)delta64;
+		g_multiplied_delta = g_delta * get_game_speed();
 		time_before = now;
 
 		g_arena.used = 0;
@@ -137,7 +139,8 @@ func void init_game(void)
 	g_game.speed_index = 5;
 
 	// add_weapon(&g_game.player, e_weapon_giant_club);
-	add_weapon(&g_game.player, e_weapon_bardiche2);
+	// add_weapon(&g_game.player, e_weapon_bardiche2);
+	add_weapon(&g_game.player, e_weapon_lightning_bolt);
 	// g_game.player.weapon_arr[e_weapon_giant_club].level = 20;
 }
 
@@ -431,7 +434,7 @@ func void update(void)
 		for(int i = 0; i < player->weapon_count; i += 1) {
 			e_weapon weapon_type = player->weapon_index_arr[i];
 			s_weapon* weapon = &player->weapon_arr[weapon_type];
-			int delay = g_weapon_data_arr[weapon_type].delay;
+			int delay = get_weapon_delay(*weapon, weapon_type);
 			add_at_most_int(&weapon->timer, 1, delay);
 			if(weapon->timer >= delay) {
 				weapon->timer -= delay;
@@ -528,6 +531,23 @@ func void update(void)
 						}
 					} break;
 
+					case e_weapon_lightning_bolt: {
+						s_cell_iterator it = zero;
+						int possible_target_arr[1024];
+						int possible_target_count = 0;
+						while(get_enemy_in_cells(&it, g_game.player.pos, wxy(0.9f, 0.9f))) {
+							possible_target_arr[possible_target_count] = it.index;
+							possible_target_count += 1;
+							if(possible_target_count >= 1024) { break; }
+						}
+						if(possible_target_count > 0) {
+							int rand_index = rand_range_ie(&g_game.rng, 0, possible_target_count);
+							int enemy = possible_target_arr[rand_index];
+							damage_enemy(enemy, 1);
+							make_visual_effect(enemy_arr->pos[enemy], e_visual_effect_lightning_bolt);
+						}
+					} break;
+
 					invalid_default_case;
 				}
 			}
@@ -559,6 +579,7 @@ func void render(f32 interp_dt)
 	s_inactive_pickup_arr* inactive_pickup_arr = &g_game.inactive_pickup_arr;
 	s_active_pickup_arr* active_pickup_arr = &g_game.active_pickup_arr;
 	s_aoe_arr* aoe_arr = &g_game.aoe_arr;
+	s_visual_effect_arr* visual_effect_arr = &g_game.visual_effect_arr;
 
 	{
 		s_player player = g_game.player;
@@ -635,6 +656,38 @@ func void render(f32 interp_dt)
 		s_v2 pos = lerp_v2(player.prev_pos, player.pos, interp_dt);
 		draw_texture_center_camera(pos, c_player_size, make_color_1(1), g_texture_arr[e_texture_player], g_game.camera);
 	}
+
+	for_visual_effect_partial(i) {
+		if(!visual_effect_arr->active[i]) { continue; }
+		visual_effect_arr->time_passed[i] += g_multiplied_delta;
+		bool expired = false;
+		switch(visual_effect_arr->type[i]) {
+			case e_visual_effect_lightning_bolt: {
+				s_v2 pos = visual_effect_arr->pos[i];
+				f32 y_screen = world_to_screen(pos, g_game.camera).y;
+				s_v2 top = v2_sub(pos, v2(0, y_screen));
+				s_v2 size = v2_1(32);
+				int how_many_fit = ceilfi((pos.y - top.y) / (size.y * 0.5f));
+
+				for(int fit_i = 0; fit_i < how_many_fit; fit_i += 1) {
+					float p = index_count_safe_div(fit_i, how_many_fit);
+					s_v2 temp_pos = lerp_v2(top, pos, p);
+					draw_texture_center_camera(temp_pos, size, make_color_1(1), g_texture_arr[e_texture_lightning_bolt], g_game.camera);
+				}
+
+				if(visual_effect_arr->time_passed[i] >= 0.15f) {
+					expired = true;
+				}
+
+			} break;
+
+			invalid_default_case;
+		}
+		if(expired) {
+			remove_entity(i, visual_effect_arr->active, &visual_effect_arr->index_data);
+		}
+	}
+
 
 	switch(g_game.state0) {
 		// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		state0 play start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
@@ -1480,4 +1533,39 @@ func bool damage_enemy(int enemy, int damage)
 		return true;
 	}
 	return false;
+}
+
+func int make_visual_effect(s_v2 pos, e_visual_effect type)
+{
+	s_visual_effect_arr* visual_effect_arr = &g_game.visual_effect_arr;
+	int entity = make_entity(visual_effect_arr->active, &visual_effect_arr->index_data);
+	visual_effect_arr->pos[entity] = pos;
+	visual_effect_arr->time_passed[entity] = 0;
+	visual_effect_arr->type[entity] = type;
+	return entity;
+}
+
+func f32 index_count_safe_div(int i, int count)
+{
+	int count2 = count - 1;
+	if(count2 == 0) { return 1; }
+	return i / (f32)count2;
+}
+
+func int at_least_int(int a, int b)
+{
+	return max(a, b);
+}
+
+func int get_weapon_delay(s_weapon weapon, e_weapon type)
+{
+	int result = g_weapon_data_arr[type].delay;
+
+	switch(type) {
+		case e_weapon_lightning_bolt: {
+			result -= weapon.level * 2;
+		} break;
+	}
+
+	return at_least_int(0, result);
 }

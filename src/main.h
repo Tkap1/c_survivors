@@ -10,6 +10,7 @@
 #define for_inactive_pickup_partial(index_name) for(int index_name = g_game.inactive_pickup_arr.index_data.min_index; index_name < g_game.inactive_pickup_arr.index_data.max_index_plus_one; index_name += 1)
 #define for_active_pickup_partial(index_name) for(int index_name = g_game.active_pickup_arr.index_data.min_index; index_name < g_game.active_pickup_arr.index_data.max_index_plus_one; index_name += 1)
 #define for_aoe_partial(index_name) for(int index_name = g_game.aoe_arr.index_data.min_index; index_name < g_game.aoe_arr.index_data.max_index_plus_one; index_name += 1)
+#define for_visual_effect_partial(index_name) for(int index_name = g_game.visual_effect_arr.index_data.min_index; index_name < g_game.visual_effect_arr.index_data.max_index_plus_one; index_name += 1)
 
 
 typedef struct s_v2
@@ -38,6 +39,7 @@ typedef enum e_texture
 	e_texture_cakez2,
 	e_texture_bolt03,
 	e_texture_vacuum_exp,
+	e_texture_lightning_bolt,
 	e_texture_count,
 } e_texture;
 
@@ -53,6 +55,7 @@ global char* c_texture_path_arr[e_texture_count] = {
 	"assets/cakez2.png",
 	"assets/crawl/effect/bolt03.png",
 	"assets/crawl/item/misc/misc_orb.png",
+	"assets/crawl/effect/bolt06.png",
 };
 global SDL_Texture* g_texture_arr[e_texture_count];
 
@@ -95,12 +98,19 @@ global s_enemy_type g_enemy_type_arr[e_enemy_type_count] = {
 
 #define get_enemy_type_property(entity, name) g_enemy_type_arr[g_game.enemy_arr.type[(entity)]].name
 
+typedef enum e_visual_effect
+{
+	e_visual_effect_lightning_bolt,
+	e_visual_effect_count,
+} e_visual_effect;
+
 typedef enum e_weapon
 {
 	e_weapon_pierce,
 	e_weapon_bardiche2,
 	e_weapon_battle_axe1,
 	e_weapon_giant_club,
+	e_weapon_lightning_bolt,
 	e_weapon_count,
 } e_weapon;
 
@@ -115,6 +125,7 @@ global s_weapon_data g_weapon_data_arr[e_weapon_count] = {
 	{80, e_texture_bolt03},
 	{25, e_texture_battle_axe1},
 	{25, e_texture_giant_club},
+	{25, e_texture_lightning_bolt},
 };
 
 typedef enum e_state0
@@ -206,6 +217,16 @@ typedef struct s_enemy_arr
 	s_v2 pos[c_max_entities];
 	s_v2 dir[c_max_entities];
 } s_enemy_arr;
+
+typedef struct s_visual_effect_arr
+{
+	s_entity_index_data index_data;
+	bool active[c_max_entities];
+
+	float time_passed[c_max_entities];
+	e_visual_effect type[c_max_entities];
+	s_v2 pos[c_max_entities];
+} s_visual_effect_arr;
 
 typedef struct s_inactive_pickup_arr
 {
@@ -301,6 +322,7 @@ typedef struct s_game
 	s_active_pickup_arr active_pickup_arr;
 	s_projectile_arr projectile_arr;
 	s_aoe_arr aoe_arr;
+	s_visual_effect_arr visual_effect_arr;
 	bool key_down_arr[SDL_SCANCODE_COUNT];
 } s_game;
 
@@ -387,3 +409,7 @@ func int activate_pickup(int entity);
 func int activate_pickup_and_remove(int entity);
 func int make_pickup(s_v2 pos, e_pickup type);
 func bool damage_enemy(int enemy, int damage);
+func int make_visual_effect(s_v2 pos, e_visual_effect type);
+func f32 index_count_safe_div(int i, int count);
+func int get_weapon_delay(s_weapon weapon, e_weapon type);
+func int at_least_int(int a, int b);
