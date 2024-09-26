@@ -44,6 +44,19 @@ func f32 randf_negative32(s_rng* rng)
 	return randf32(rng) * 2 - 1;
 }
 
+func f32 randf_range(s_rng* rng, f32 min_val, f32 max_val)
+{
+	if(min_val > max_val) {
+		f32 temp = min_val;
+		min_val = max_val;
+		max_val = temp;
+	}
+
+	f32 r = randf32(rng);
+	return min_val + (max_val - min_val) * r;
+}
+
+
 func bool rand_chance100(s_rng* rng, float chance)
 {
 	float r = randf32(rng) * 100;

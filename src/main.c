@@ -136,8 +136,9 @@ func void init_game(void)
 	g_game.player.level = 1;
 	g_game.speed_index = 5;
 
-	add_weapon(&g_game.player, e_weapon_giant_club);
-	g_game.player.weapon_arr[e_weapon_giant_club].level = 20;
+	// add_weapon(&g_game.player, e_weapon_giant_club);
+	add_weapon(&g_game.player, e_weapon_bardiche2);
+	// g_game.player.weapon_arr[e_weapon_giant_club].level = 20;
 }
 
 func void update(void)
@@ -298,7 +299,7 @@ func void update(void)
 
 		// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		trigger start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 		{
-			s_cell_iterator it = make_cell_iterator();
+			s_cell_iterator it = zero;
 			while(get_inactive_pickup_in_cells(&it, g_game.player.pos, c_pickup_trigger_radius)) {
 				assert(inactive_pickup_arr->active[it.index]);
 				s_v2 dir = v2_from_to_normalized(g_game.player.pos, inactive_pickup_arr->pos[it.index]);
@@ -318,7 +319,7 @@ func void update(void)
 
 		// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		collide with player start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 		{
-			s_cell_iterator it = make_cell_iterator();
+			s_cell_iterator it = zero;
 			while(get_active_pickup_in_cells(&it, g_game.player.pos, c_player_size)) {
 				assert(active_pickup_arr->active[it.index]);
 
@@ -377,10 +378,14 @@ func void update(void)
 			assert(projectile_arr->pierce_count[i] <= c_max_pierces);
 
 			s_v2 projectile_pos = projectile_arr->pos[i];
-			s_cell_iterator it = make_cell_iterator();
-			while(get_enemy_in_cells(&it, projectile_pos, c_projectile_size)) {
+			s_cell_iterator it = zero;
+			bool timed_area = projectile_arr->timed_area[i];
+			bool can_hit = (timed_area && projectile_arr->hit_timer[i] <= 0) || !timed_area;
+			projectile_arr->hit_timer[i] -= 1;
+			if(can_hit) { projectile_arr->hit_timer[i] = 60; }
+			while(can_hit && get_enemy_in_cells(&it, projectile_pos, c_projectile_size)) {
 				assert(enemy_arr->active[it.index]);
-				if(is_enemy_already_hit(projectile_arr->already_hit_arr[i], projectile_arr->already_hit_count[i], it.index)) { continue; }
+				if(!timed_area && is_enemy_already_hit(projectile_arr->already_hit_arr[i], projectile_arr->already_hit_count[i], it.index)) { continue; }
 
 				s_v2 push_dir = v2_scale(projectile_arr->dir[i], 5.0f);
 				v2_add_p(&enemy_arr->pos[it.index], push_dir);
@@ -390,11 +395,14 @@ func void update(void)
 					make_exp(enemy_arr->pos[it.index]);
 					remove_entity(it.index, enemy_arr->active, &enemy_arr->index_data);
 				}
-				if(projectile_arr->pierce_count[i] <= 0) {
-					remove_entity(i, projectile_arr->active, &projectile_arr->index_data);
-					break;
+
+				if(!timed_area) {
+					if(projectile_arr->pierce_count[i] <= 0) {
+						remove_entity(i, projectile_arr->active, &projectile_arr->index_data);
+						break;
+					}
+					projectile_arr->pierce_count[i] -= 1;
 				}
-				projectile_arr->pierce_count[i] -= 1;
 			}
 		}
 		u64 passed = SDL_GetPerformanceCounter() - before;
@@ -406,6 +414,7 @@ func void update(void)
 	// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		projectile movement start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 	for_projectile_partial(i) {
 		if(!projectile_arr->active[i]) { continue; }
+		projectile_arr->dir[i].y += projectile_arr->gravity[i];
 		v2_add_scale_p(&projectile_arr->pos[i], projectile_arr->dir[i], projectile_arr->speed[i]);
 	}
 	// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		projectile movement end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -435,8 +444,6 @@ func void update(void)
 						projectile_arr->pierce_count[projectile] = weapon->level + 1;
 					} break;
 
-					case e_weapon_bardiche2:
-					case e_weapon_battle_axe1:
 					case e_weapon_giant_club:
 					{
 						int closest = get_closest_enemy(player->pos);
@@ -452,6 +459,58 @@ func void update(void)
 							float angle = get_projectile_angle(projectile_i, num_projectiles);
 							s_v2 dir = v2_rotated(base_dir, angle);
 							make_projectile(player->pos, dir, g_texture_arr[g_weapon_data_arr[weapon_type].texture]);
+						}
+					} break;
+
+					case e_weapon_battle_axe1: {
+						int num_projectiles = weapon->level;
+						for(int projectile_i = 0; projectile_i < num_projectiles; projectile_i += 1) {
+							float angle = randf_range(&g_game.rng, -c_pi * 0.25f, c_pi * 0.25f) - c_pi * 0.5f;
+							s_v2 dir = v2_from_angle(angle);
+							v2_scale_p(&dir, 2);
+							int projectile = make_projectile(g_game.player.pos, dir, g_texture_arr[g_weapon_data_arr[weapon_type].texture]);
+							projectile_arr->gravity[projectile] = 0.1f;
+						}
+					} break;
+
+					case e_weapon_bardiche2: {
+						int num_projectiles = weapon->level;
+						s_v2 c_size_arr[] = {wxy(0.25f, 0.25f), wxy(0.5f, 0.5f), wxy(0.75f, 0.75f)};
+						for(int projectile_i = 0; projectile_i < num_projectiles; projectile_i += 1) {
+							int enemy = -1;
+
+							int possible_target_arr[512];
+							int possible_target_count = 0;
+							for(int attempt_i = 0; attempt_i < array_count(c_size_arr); attempt_i += 1) {
+								s_cell_iterator it = zero;
+								while(get_enemy_in_cells(&it, g_game.player.pos, c_size_arr[attempt_i])) {
+									possible_target_arr[possible_target_count] = it.index;
+									possible_target_count += 1;
+									if(possible_target_count >= 512) { break; }
+								}
+								if(possible_target_count > 0) {
+									int rand_index = rand_range_ie(&g_game.rng, 0, possible_target_count);
+									enemy = possible_target_arr[rand_index];
+									break;
+								}
+							}
+
+							s_v2 projectile_pos;
+							if(enemy == -1) {
+								float x_angle = randf32(&g_game.rng) * c_tau;
+								float y_angle = randf32(&g_game.rng) * c_tau;
+								float x = cosf(x_angle);
+								float y = sinf(y_angle);
+								projectile_pos = v2_scale(v2(x, y), c_window_width * 0.2f);
+								v2_add_p(&projectile_pos, g_game.player.pos);
+							}
+							else {
+								projectile_pos = enemy_arr->pos[enemy];
+							}
+
+							int projectile = make_projectile(projectile_pos, v2_1(0), g_texture_arr[g_weapon_data_arr[weapon_type].texture]);
+							projectile_arr->timed_area[projectile] = true;
+							projectile_arr->ticks_left[projectile] = 500;
 						}
 					} break;
 
@@ -645,18 +704,19 @@ func void render(f32 interp_dt)
 	}
 	// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		weapon ui end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-	{
-		s_v2 pos = v2(0, 100);
-		for(int i = 0; i < g_time_count; i += 1) {
-			u64 t = g_time_arr[i];
-			f64 seconds = t / (f64)g_cycle_frequency;
-			f64 us = seconds * 1000000;
-			f32 width = (f32)(us / 100.0 * c_window_width);
-			s_v2 size = v2(width, 24.0f);
-			draw_rect_topleft(pos, size, make_color_1((i & 1) ? 0.5f : 0.25f));
-			pos.y += 28;
-		}
-	}
+	// @Note(tkap, 26/09/2024): "profiler"
+	// {
+	// 	s_v2 pos = v2(0, 100);
+	// 	for(int i = 0; i < g_time_count; i += 1) {
+	// 		u64 t = g_time_arr[i];
+	// 		f64 seconds = t / (f64)g_cycle_frequency;
+	// 		f64 us = seconds * 1000000;
+	// 		f32 width = (f32)(us / 100.0 * c_window_width);
+	// 		s_v2 size = v2(width, 24.0f);
+	// 		draw_rect_topleft(pos, size, make_color_1((i & 1) ? 0.5f : 0.25f));
+	// 		pos.y += 28;
+	// 	}
+	// }
 
 	SDL_RenderPresent(g_renderer);
 }
@@ -739,6 +799,9 @@ func int make_projectile(s_v2 pos, s_v2 dir, SDL_Texture* texture)
 	g_game.projectile_arr.speed[entity] = 8;
 	g_game.projectile_arr.ticks_left[entity] = 500;
 	g_game.projectile_arr.texture[entity] = texture;
+	g_game.projectile_arr.gravity[entity] = 0;
+	g_game.projectile_arr.timed_area[entity] = false;
+	g_game.projectile_arr.hit_timer[entity] = 0;
 	return entity;
 }
 
@@ -1313,4 +1376,9 @@ func bool circle_vs_rect_center(s_v2 center, float radius, s_v2 rect_pos, s_v2 r
 	collision = (cornerDistanceSq <= (radius*radius));
 
 	return collision;
+}
+
+func s_v2 v2_from_angle(float angle)
+{
+	return v2(cosf(angle), sinf(angle));
 }

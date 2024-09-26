@@ -90,7 +90,7 @@ typedef struct s_weapon_data
 
 global s_weapon_data g_weapon_data_arr[e_weapon_count] = {
 	{25, e_texture_greatsword1},
-	{25, e_texture_bardiche2},
+	{80, e_texture_bardiche2},
 	{25, e_texture_battle_axe1},
 	{25, e_texture_giant_club},
 };
@@ -211,14 +211,17 @@ typedef struct s_projectile_arr
 	bool active[c_max_entities];
 
 	SDL_Texture* texture[c_max_entities];
-	int pierce_count[c_max_entities];
+	bool timed_area[c_max_entities];
+	int hit_timer[c_max_entities];
 	int ticks_left[c_max_entities];
+	int pierce_count[c_max_entities];
 	int already_hit_count[c_max_entities];
 	s64 already_hit_arr[c_max_entities][c_max_pierces];
 	s_v2 prev_pos[c_max_entities];
 	s_v2 pos[c_max_entities];
 	s_v2 dir[c_max_entities];
 	f32 speed[c_max_entities];
+	f32 gravity[c_max_entities];
 } s_projectile_arr;
 
 typedef struct s_keys
@@ -337,3 +340,4 @@ func bool circle_vs_rect_center(s_v2 center, float radius, s_v2 rect_pos, s_v2 r
 func int id_to_inactive_pickup(s_entity_id id);
 func int id_to_active_pickup(s_entity_id id);
 func int make_entity(bool* active_arr, s_entity_index_data* index_data);
+func s_v2 v2_from_angle(float angle);

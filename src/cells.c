@@ -1,25 +1,25 @@
 
-func s_cell_iterator make_cell_iterator()
-{
-	s_cell_iterator it = zero;
-	it.x = -1;
-	it.y = -1;
-	return it;
-}
-
 func bool get_enemy_in_cells(s_cell_iterator* it, s_v2 pos, s_v2 size)
 {
 	s_enemy_arr* enemy_arr = &g_game.enemy_arr;
 
+	if(!it->initialized) {
+		it->initialized = true;
+		it->base_x = ceilfi(size.x / c_cell_size);
+		it->base_y = ceilfi(size.y / c_cell_size);
+		it->x = -it->base_x;
+		it->y = -it->base_y;
+	}
+
 	int x_index = floorfi((pos.x - g_game.enemy_cell_min_bounds.x) / c_cell_size);
 	int y_index = floorfi((pos.y - g_game.enemy_cell_min_bounds.y) / c_cell_size);
 
-	for(int y = it->y; y <= 1; y += 1) {
-		for(int x = it->x; x <= 1; x += 1) {
+	for(int y = it->y; y <= it->base_y; y += 1) {
+		for(int x = it->x; x <= it->base_x; x += 1) {
 			int xx = x_index + x;
 			int yy = y_index + y;
-			if(xx < 0 || xx >= c_max_cells) { return false; }
-			if(yy < 0 || yy >= c_max_cells) { return false; }
+			if(xx < 0 || xx >= c_max_cells) { continue; }
+			if(yy < 0 || yy >= c_max_cells) { continue; }
 			s_entity_id* arr = g_game.enemy_cell_arr[yy][xx];
 			int count = array_get_count(arr);
 			for(int id_i = it->id_index; id_i < count; id_i += 1) {
@@ -36,7 +36,7 @@ func bool get_enemy_in_cells(s_cell_iterator* it, s_v2 pos, s_v2 size)
 			it->x = x + 1;
 		}
 		it->y = y + 1;
-		it->x = -1;
+		it->x = -it->base_x;
 	}
 	return false;
 }
@@ -45,15 +45,23 @@ func bool get_inactive_pickup_in_cells(s_cell_iterator* it, s_v2 pos, float radi
 {
 	s_inactive_pickup_arr* inactive_pickup_arr = &g_game.inactive_pickup_arr;
 
+	if(!it->initialized) {
+		it->initialized = true;
+		it->base_x = ceilfi(radius * 2 / c_cell_size);
+		it->base_y = ceilfi(radius * 2 / c_cell_size);
+		it->x = -it->base_x;
+		it->y = -it->base_y;
+	}
+
 	int x_index = floorfi((pos.x - g_game.inactive_pickup_cell_min_bounds.x) / c_cell_size);
 	int y_index = floorfi((pos.y - g_game.inactive_pickup_cell_min_bounds.y) / c_cell_size);
 
-	for(int y = it->y; y <= 1; y += 1) {
-		for(int x = it->x; x <= 1; x += 1) {
+	for(int y = it->y; y <= it->base_y; y += 1) {
+		for(int x = it->x; x <= it->base_x; x += 1) {
 			int xx = x_index + x;
 			int yy = y_index + y;
-			if(xx < 0 || xx >= c_max_cells) { return false; }
-			if(yy < 0 || yy >= c_max_cells) { return false; }
+			if(xx < 0 || xx >= c_max_cells) { continue; }
+			if(yy < 0 || yy >= c_max_cells) { continue; }
 			s_entity_id* arr = g_game.inactive_pickup_cell_arr[yy][xx];
 			int count = array_get_count(arr);
 			for(int id_i = it->id_index; id_i < count; id_i += 1) {
@@ -79,15 +87,23 @@ func bool get_active_pickup_in_cells(s_cell_iterator* it, s_v2 pos, s_v2 size)
 {
 	s_active_pickup_arr* active_pickup_arr = &g_game.active_pickup_arr;
 
+	if(!it->initialized) {
+		it->initialized = true;
+		it->base_x = ceilfi(size.x / c_cell_size);
+		it->base_y = ceilfi(size.y / c_cell_size);
+		it->x = -it->base_x;
+		it->y = -it->base_y;
+	}
+
 	int x_index = floorfi((pos.x - g_game.active_pickup_cell_min_bounds.x) / c_cell_size);
 	int y_index = floorfi((pos.y - g_game.active_pickup_cell_min_bounds.y) / c_cell_size);
 
-	for(int y = it->y; y <= 1; y += 1) {
-		for(int x = it->x; x <= 1; x += 1) {
+	for(int y = it->y; y <= it->base_y; y += 1) {
+		for(int x = it->x; x <= it->base_x; x += 1) {
 			int xx = x_index + x;
 			int yy = y_index + y;
-			if(xx < 0 || xx >= c_max_cells) { return false; }
-			if(yy < 0 || yy >= c_max_cells) { return false; }
+			if(xx < 0 || xx >= c_max_cells) { continue; }
+			if(yy < 0 || yy >= c_max_cells) { continue; }
 			s_entity_id* arr = g_game.active_pickup_cell_arr[yy][xx];
 			int count = array_get_count(arr);
 			for(int id_i = it->id_index; id_i < count; id_i += 1) {
