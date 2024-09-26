@@ -309,13 +309,7 @@ func void update(void)
 			s_cell_iterator it = zero;
 			while(get_enemy_in_cells(&it, aoe_arr->pos[i], aoe_arr->size[i])) {
 				assert(enemy_arr->active[it.index]);
-
-				enemy_arr->damage_taken[it.index] += 1;
-				enemy_arr->last_hit_time[it.index] = multiplied_render_time;
-				if(enemy_arr->damage_taken[it.index] >= enemy_arr->max_health[it.index]) {
-					make_exp(enemy_arr->pos[it.index]);
-					remove_entity(it.index, enemy_arr->active, &enemy_arr->index_data);
-				}
+				damage_enemy(it.index, 1);
 			}
 		}
 		aoe_arr->ticks_left[i] -= 1;
@@ -348,14 +342,7 @@ func void update(void)
 				s_v2 dir = v2_from_to_normalized(g_game.player.pos, inactive_pickup_arr->pos[it.index]);
 				v2_add_scale_p(&inactive_pickup_arr->pos[it.index], dir, 64);
 
-				int active = make_entity(active_pickup_arr->active, &active_pickup_arr->index_data);
-				active_pickup_arr->exp_to_give[active] = inactive_pickup_arr->exp_to_give[it.index];
-				active_pickup_arr->pos[active] = inactive_pickup_arr->pos[it.index];
-				active_pickup_arr->prev_pos[active] = inactive_pickup_arr->pos[it.index];
-				active_pickup_arr->speed[active] = 1;
-
-				remove_entity(it.index, inactive_pickup_arr->active, &inactive_pickup_arr->index_data);
-
+				activate_pickup_and_remove(it.index);
 			}
 		}
 		// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		trigger end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -366,37 +353,25 @@ func void update(void)
 			while(get_active_pickup_in_cells(&it, g_game.player.pos, c_player_size)) {
 				assert(active_pickup_arr->active[it.index]);
 
-				int leveled_up_count = add_exp(&g_game.player, active_pickup_arr->exp_to_give[it.index]);
-				g_game.level_up_triggers += leveled_up_count;
+				switch(active_pickup_arr->type[it.index]) {
+					case e_pickup_exp0: {
+						add_exp(&g_game.player, active_pickup_arr->exp_to_give[it.index]);
+					} break;
+
+					case e_pickup_vacuum_exp: {
+						for_inactive_pickup_partial(i) {
+							if(!inactive_pickup_arr->active[i]) { continue; }
+							activate_pickup_and_remove(i);
+						}
+					} break;
+
+					invalid_default_case;
+				}
 				remove_entity(it.index, active_pickup_arr->active, &active_pickup_arr->index_data);
 			}
 		}
 		// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		collide with player end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-
-		#if 0
-		for_pickup_partial(i) {
-			if(!pickup_arr->active[i]) { continue; }
-			if(pickup_arr->following_player[i]) {
-				s_v2 dir = v2_from_to_normalized(pickup_arr->pos[i], g_game.player.pos);
-				v2_add_scale_p(&pickup_arr->pos[i], dir, pickup_arr->speed[i]);
-				pickup_arr->speed[i] += 0.1f;
-				if(rect_collides_rect_center(g_game.player.pos, c_player_size, pickup_arr->pos[i], c_exp_size)) {
-					int leveled_up_count = add_exp(&g_game.player, pickup_arr->exp_to_give[i]);
-					g_game.level_up_triggers += leveled_up_count;
-					remove_entity(i, pickup_arr->active, &pickup_arr->index_data);
-				}
-			}
-			else {
-				f32 distance = v2_distance(g_game.player.pos, pickup_arr->pos[i]);
-				if(distance < 64) {
-					pickup_arr->following_player[i] = true;
-					s_v2 dir = v2_from_to_normalized(g_game.player.pos, pickup_arr->pos[i]);
-					v2_add_scale_p(&pickup_arr->pos[i], dir, 64);
-				}
-			}
-		}
-		#endif
 		u64 passed = SDL_GetPerformanceCounter() - before;
 		g_time_arr[g_time_count] = passed;
 		g_time_count += 1;
@@ -428,13 +403,7 @@ func void update(void)
 
 				s_v2 push_dir = v2_scale(projectile_arr->dir[i], 5.0f);
 				v2_add_p(&enemy_arr->pos[it.index], push_dir);
-				enemy_arr->damage_taken[it.index] += 1;
-				enemy_arr->last_hit_time[it.index] = multiplied_render_time;
-				if(enemy_arr->damage_taken[it.index] >= enemy_arr->max_health[it.index]) {
-					make_exp(enemy_arr->pos[it.index]);
-					remove_entity(it.index, enemy_arr->active, &enemy_arr->index_data);
-				}
-
+				damage_enemy(it.index, 1);
 				if(projectile_arr->pierce_count[i] <= 0) {
 					remove_entity(i, projectile_arr->active, &projectile_arr->index_data);
 					break;
@@ -478,7 +447,9 @@ func void update(void)
 							base_dir = rand_v2_normalized(&g_game.rng);
 						}
 						int projectile = make_projectile(player->pos, v2_1(32), base_dir, g_texture_arr[g_weapon_data_arr[weapon_type].texture]);
-						projectile_arr->pierce_count[projectile] = weapon->level + 1;
+						// nocheckin
+						// projectile_arr->pierce_count[projectile] = weapon->level + 1;
+						projectile_arr->pierce_count[projectile] = 1;
 					} break;
 
 					case e_weapon_giant_club:
@@ -640,13 +611,17 @@ func void render(f32 interp_dt)
 	for_inactive_pickup_partial(i) {
 		if(!inactive_pickup_arr->active[i]) { continue; }
 		s_v2 pos = inactive_pickup_arr->pos[i];
-		draw_texture_center_camera(pos, c_exp_size, make_color_1(1), g_texture_arr[e_texture_exp], g_game.camera);
+		e_pickup type = inactive_pickup_arr->type[i];
+		e_texture texture = g_pickup_data_arr[type].texture;
+		draw_texture_center_camera(pos, c_exp_size, make_color_1(1), g_texture_arr[texture], g_game.camera);
 	}
 
 	for_active_pickup_partial(i) {
 		if(!active_pickup_arr->active[i]) { continue; }
 		s_v2 pos = lerp_v2(active_pickup_arr->prev_pos[i], active_pickup_arr->pos[i], interp_dt);
-		draw_texture_center_camera(pos, c_exp_size, make_color_1(1), g_texture_arr[e_texture_exp], g_game.camera);
+		e_pickup type = active_pickup_arr->type[i];
+		e_texture texture = g_pickup_data_arr[type].texture;
+		draw_texture_center_camera(pos, c_exp_size, make_color_1(1), g_texture_arr[texture], g_game.camera);
 	}
 
 	for_projectile_partial(i) {
@@ -884,10 +859,17 @@ func int make_enemy(s_v2 pos, e_enemy_type type)
 	return entity;
 }
 
-func int make_exp(s_v2 pos)
+func int make_pickup(s_v2 pos, e_pickup type)
 {
 	int entity = make_entity(g_game.inactive_pickup_arr.active, &g_game.inactive_pickup_arr.index_data);
 	g_game.inactive_pickup_arr.pos[entity] = pos;
+	g_game.inactive_pickup_arr.type[entity] = type;
+	return entity;
+}
+
+func int make_exp(s_v2 pos)
+{
+	int entity = make_pickup(pos, e_pickup_exp0);
 	g_game.inactive_pickup_arr.exp_to_give[entity] = 1;
 	return entity;
 }
@@ -1099,6 +1081,7 @@ func int add_exp(s_player* player, int exp_to_give)
 		exp_to_level = get_exp_to_level(player->level);
 		result += 1;
 	}
+	g_game.level_up_triggers += result;
 	return result;
 }
 
@@ -1458,4 +1441,43 @@ func s_v2 move_towards_v2(s_v2 a, s_v2 b, float speed, float* out_distance)
 		*out_distance = v2_distance(result, b);
 	}
 	return result;
+}
+
+func int activate_pickup(int entity)
+{
+	s_inactive_pickup_arr* inactive_pickup_arr = &g_game.inactive_pickup_arr;
+	s_active_pickup_arr* active_pickup_arr = &g_game.active_pickup_arr;
+	int active = make_entity(active_pickup_arr->active, &active_pickup_arr->index_data);
+	active_pickup_arr->exp_to_give[active] = inactive_pickup_arr->exp_to_give[entity];
+	active_pickup_arr->type[active] = inactive_pickup_arr->type[entity];
+	active_pickup_arr->pos[active] = inactive_pickup_arr->pos[entity];
+	active_pickup_arr->prev_pos[active] = inactive_pickup_arr->pos[entity];
+	active_pickup_arr->speed[active] = 1;
+	return active;
+}
+
+func int activate_pickup_and_remove(int entity)
+{
+	s_inactive_pickup_arr* inactive_pickup_arr = &g_game.inactive_pickup_arr;
+	assert(inactive_pickup_arr->active[entity]);
+
+	int active = activate_pickup(entity);
+	remove_entity(entity, inactive_pickup_arr->active, &inactive_pickup_arr->index_data);
+	return active;
+}
+
+func bool damage_enemy(int enemy, int damage)
+{
+	s_enemy_arr* enemy_arr = &g_game.enemy_arr;
+	enemy_arr->damage_taken[enemy] += damage;
+	enemy_arr->last_hit_time[enemy] = multiplied_render_time;
+	if(enemy_arr->damage_taken[enemy] >= enemy_arr->max_health[enemy]) {
+		make_exp(enemy_arr->pos[enemy]);
+		remove_entity(enemy, enemy_arr->active, &enemy_arr->index_data);
+		if(rand_chance100(&g_game.rng, 1)) {
+			make_pickup(v2_add(enemy_arr->pos[enemy], v2(10, 0)), e_pickup_vacuum_exp);
+		}
+		return true;
+	}
+	return false;
 }

@@ -25,7 +25,6 @@ typedef struct s_rgb
 	f32 b;
 } s_rgb;
 
-
 typedef enum e_texture
 {
 	e_texture_player,
@@ -38,6 +37,7 @@ typedef enum e_texture
 	e_texture_greatsword1,
 	e_texture_cakez2,
 	e_texture_bolt03,
+	e_texture_vacuum_exp,
 	e_texture_count,
 } e_texture;
 
@@ -52,8 +52,27 @@ global char* c_texture_path_arr[e_texture_count] = {
 	"assets/crawl/item/weapon/greatsword1.png",
 	"assets/cakez2.png",
 	"assets/crawl/effect/bolt03.png",
+	"assets/crawl/item/misc/misc_orb.png",
 };
 global SDL_Texture* g_texture_arr[e_texture_count];
+
+
+typedef enum e_pickup
+{
+	e_pickup_exp0,
+	e_pickup_vacuum_exp,
+	e_pickup_count,
+} e_pickup;
+
+typedef struct s_pickup_data
+{
+	e_texture texture;
+} s_pickup_data;
+
+global s_pickup_data g_pickup_data_arr[e_pickup_count] = {
+	{e_texture_exp},
+	{e_texture_vacuum_exp},
+};
 
 typedef enum e_enemy_type
 {
@@ -193,6 +212,7 @@ typedef struct s_inactive_pickup_arr
 	s_entity_index_data index_data;
 	bool active[c_max_entities];
 
+	e_pickup type[c_max_entities];
 	int exp_to_give[c_max_entities];
 	s_v2 pos[c_max_entities];
 } s_inactive_pickup_arr;
@@ -202,6 +222,7 @@ typedef struct s_active_pickup_arr
 	s_entity_index_data index_data;
 	bool active[c_max_entities];
 
+	e_pickup type[c_max_entities];
 	int exp_to_give[c_max_entities];
 	f32 speed[c_max_entities];
 	s_v2 prev_pos[c_max_entities];
@@ -362,3 +383,7 @@ func int make_entity(bool* active_arr, s_entity_index_data* index_data);
 func s_v2 v2_from_angle(float angle);
 func int make_aoe(s_v2 pos, s_v2 size, SDL_Texture* texture);
 func s_v2 move_towards_v2(s_v2 a, s_v2 b, float speed, float* out_distance);
+func int activate_pickup(int entity);
+func int activate_pickup_and_remove(int entity);
+func int make_pickup(s_v2 pos, e_pickup type);
+func bool damage_enemy(int enemy, int damage);
