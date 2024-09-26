@@ -383,7 +383,7 @@ func void update(void)
 			bool can_hit = (timed_area && projectile_arr->hit_timer[i] <= 0) || !timed_area;
 			projectile_arr->hit_timer[i] -= 1;
 			if(can_hit) { projectile_arr->hit_timer[i] = 60; }
-			while(can_hit && get_enemy_in_cells(&it, projectile_pos, c_projectile_size)) {
+			while(can_hit && get_enemy_in_cells(&it, projectile_pos, projectile_arr->size[i])) {
 				assert(enemy_arr->active[it.index]);
 				if(!timed_area && is_enemy_already_hit(projectile_arr->already_hit_arr[i], projectile_arr->already_hit_count[i], it.index)) { continue; }
 
@@ -440,7 +440,7 @@ func void update(void)
 						else {
 							base_dir = rand_v2_normalized(&g_game.rng);
 						}
-						int projectile = make_projectile(player->pos, base_dir, g_texture_arr[g_weapon_data_arr[weapon_type].texture]);
+						int projectile = make_projectile(player->pos, v2_1(32), base_dir, g_texture_arr[g_weapon_data_arr[weapon_type].texture]);
 						projectile_arr->pierce_count[projectile] = weapon->level + 1;
 					} break;
 
@@ -458,7 +458,7 @@ func void update(void)
 						for(int projectile_i = 0; projectile_i < num_projectiles; projectile_i += 1) {
 							float angle = get_projectile_angle(projectile_i, num_projectiles);
 							s_v2 dir = v2_rotated(base_dir, angle);
-							make_projectile(player->pos, dir, g_texture_arr[g_weapon_data_arr[weapon_type].texture]);
+							make_projectile(player->pos, v2_1(32), dir, g_texture_arr[g_weapon_data_arr[weapon_type].texture]);
 						}
 					} break;
 
@@ -468,7 +468,7 @@ func void update(void)
 							float angle = randf_range(&g_game.rng, -c_pi * 0.25f, c_pi * 0.25f) - c_pi * 0.5f;
 							s_v2 dir = v2_from_angle(angle);
 							v2_scale_p(&dir, 2);
-							int projectile = make_projectile(g_game.player.pos, dir, g_texture_arr[g_weapon_data_arr[weapon_type].texture]);
+							int projectile = make_projectile(g_game.player.pos, v2_1(64), dir, g_texture_arr[g_weapon_data_arr[weapon_type].texture]);
 							projectile_arr->gravity[projectile] = 0.1f;
 						}
 					} break;
@@ -508,9 +508,9 @@ func void update(void)
 								projectile_pos = enemy_arr->pos[enemy];
 							}
 
-							int projectile = make_projectile(projectile_pos, v2_1(0), g_texture_arr[g_weapon_data_arr[weapon_type].texture]);
+							int projectile = make_projectile(projectile_pos, v2_1(64), v2_1(0), g_texture_arr[g_weapon_data_arr[weapon_type].texture]);
 							projectile_arr->timed_area[projectile] = true;
-							projectile_arr->ticks_left[projectile] = 500;
+							projectile_arr->ticks_left[projectile] = 200;
 						}
 					} break;
 
@@ -601,7 +601,7 @@ func void render(f32 interp_dt)
 	for_projectile_partial(i) {
 		if(!projectile_arr->active[i]) { continue; }
 		s_v2 pos = lerp_v2(projectile_arr->prev_pos[i], projectile_arr->pos[i], interp_dt);
-		draw_texture_center_camera(pos, c_projectile_size, make_color_1(0.5f), projectile_arr->texture[i], g_game.camera);
+		draw_texture_center_camera(pos, projectile_arr->size[i], make_color_1(1), projectile_arr->texture[i], g_game.camera);
 	}
 
 	{
@@ -790,7 +790,7 @@ func int make_entity(bool* active_arr, s_entity_index_data* index_data)
 	return -1;
 }
 
-func int make_projectile(s_v2 pos, s_v2 dir, SDL_Texture* texture)
+func int make_projectile(s_v2 pos, s_v2 size, s_v2 dir, SDL_Texture* texture)
 {
 	int entity = make_entity(g_game.projectile_arr.active, &g_game.projectile_arr.index_data);
 	g_game.projectile_arr.pos[entity] = pos;
@@ -802,6 +802,7 @@ func int make_projectile(s_v2 pos, s_v2 dir, SDL_Texture* texture)
 	g_game.projectile_arr.gravity[entity] = 0;
 	g_game.projectile_arr.timed_area[entity] = false;
 	g_game.projectile_arr.hit_timer[entity] = 0;
+	g_game.projectile_arr.size[entity] = size;
 	return entity;
 }
 

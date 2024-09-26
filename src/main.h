@@ -36,6 +36,7 @@ typedef enum e_texture
 	e_texture_giant_club,
 	e_texture_greatsword1,
 	e_texture_cakez2,
+	e_texture_bolt03,
 	e_texture_count,
 } e_texture;
 
@@ -49,6 +50,7 @@ global char* c_texture_path_arr[e_texture_count] = {
 	"assets/crawl/item/weapon/giant_club.png",
 	"assets/crawl/item/weapon/greatsword1.png",
 	"assets/cakez2.png",
+	"assets/crawl/effect/bolt03.png",
 };
 global SDL_Texture* g_texture_arr[e_texture_count];
 
@@ -90,7 +92,7 @@ typedef struct s_weapon_data
 
 global s_weapon_data g_weapon_data_arr[e_weapon_count] = {
 	{25, e_texture_greatsword1},
-	{80, e_texture_bardiche2},
+	{80, e_texture_bolt03},
 	{25, e_texture_battle_axe1},
 	{25, e_texture_giant_club},
 };
@@ -219,6 +221,7 @@ typedef struct s_projectile_arr
 	s64 already_hit_arr[c_max_entities][c_max_pierces];
 	s_v2 prev_pos[c_max_entities];
 	s_v2 pos[c_max_entities];
+	s_v2 size[c_max_entities];
 	s_v2 dir[c_max_entities];
 	f32 speed[c_max_entities];
 	f32 gravity[c_max_entities];
@@ -285,7 +288,7 @@ func s_v2 v2_sub(s_v2 a, s_v2 b);
 func s_v2 v2_from_to(s_v2 from, s_v2 to);
 func s_v2 v2_from_to_normalized(s_v2 from, s_v2 to);
 func void add_at_most_int(int* out, int to_add, int max_val);
-func int make_projectile(s_v2 pos, s_v2 dir, SDL_Texture* texture);
+func int make_projectile(s_v2 pos, s_v2 size, s_v2 dir, SDL_Texture* texture);
 func f32 v2_length_squared(s_v2 v);
 func f32 v2_distance_squared(s_v2 a, s_v2 b);
 func s_rgb make_color(float r, float g, float b);

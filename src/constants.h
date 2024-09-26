@@ -31,7 +31,6 @@ typedef double f64;
 #define c_cell_size 128.0f
 #define c_max_cells 30
 
-#define c_projectile_size v2_1(32)
 #define c_player_size v2_1(48)
 #define c_exp_size v2_1(24)
 
