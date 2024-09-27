@@ -138,10 +138,7 @@ func void init_game(void)
 	g_game.player.level = 1;
 	g_game.speed_index = 5;
 
-	// add_weapon(&g_game.player, e_weapon_giant_club);
-	// add_weapon(&g_game.player, e_weapon_bardiche2);
-	add_weapon(&g_game.player, e_weapon_lightning_bolt);
-	// g_game.player.weapon_arr[e_weapon_giant_club].level = 20;
+	add_weapon(&g_game.player, e_weapon_giant_club);
 }
 
 func void update(void)
