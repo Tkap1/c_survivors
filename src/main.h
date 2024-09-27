@@ -45,7 +45,7 @@ typedef enum e_texture
 
 global char* c_texture_path_arr[e_texture_count] = {
 	"assets/crawl/player/base/vampire_m.png",
-	"enemy.png",
+	"assets/enemy.png",
 	"assets/crawl/item/misc/misc_crystal.png",
 	"assets/crawl/item/weapon/bardiche1.png",
 	"assets/crawl/item/weapon/bardiche2.png",
