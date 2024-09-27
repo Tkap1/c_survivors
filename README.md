@@ -1,4 +1,4 @@
-VERY incomplete Vampire Survivors clone using C and SDL3.
+VERY incomplete Vampire Survivors clone using C and SDL3 in 3 days, or about 25~ hours of work, mostly done live on stream https://www.twitch.tv/tkap1
 
 Run `main.exe` or build it by calling one of:
 
