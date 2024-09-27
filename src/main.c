@@ -1374,6 +1374,7 @@ func void* make_dynamic_array(int element_size, int initial_capacity, s_linear_a
 	return result;
 }
 
+// @Note(tkap, 27/09/2024): This function crashes every now and then on "long" (20000+ enemies spawned) play sessions, but I'm too lazy to debug it
 func void array_add(void** in_arr, void* new_element, s_linear_arena* arena)
 {
 	u8* arr = *in_arr;
