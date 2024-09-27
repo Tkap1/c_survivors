@@ -8,7 +8,7 @@
 #pragma warning(push, 0)
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_ASSERT(x)
-#include "stb_image.h"
+#include "include/stb_image.h"
 #pragma warning(pop)
 
 #include "SDL3/SDL.h"
@@ -29,7 +29,6 @@ global u64 g_time_arr[32];
 global int g_time_count;
 
 #include "rng.c"
-#include "simd.c"
 #include "cells.c"
 
 int main(void)
