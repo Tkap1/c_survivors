@@ -319,13 +319,11 @@ func void update(void)
 	// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		aoe damage enemies and expire end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 	// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		active pickup move start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-	{
-		for_active_pickup_partial(i) {
-			if(!active_pickup_arr->active[i]) { continue; }
-			s_v2 dir = v2_from_to_normalized(active_pickup_arr->pos[i], g_game.player.pos);
-			v2_add_scale_p(&active_pickup_arr->pos[i], dir, active_pickup_arr->speed[i]);
-			active_pickup_arr->speed[i] += 0.1f;
-		}
+	for_active_pickup_partial(i) {
+		if(!active_pickup_arr->active[i]) { continue; }
+		s_v2 dir = v2_from_to_normalized(active_pickup_arr->pos[i], g_game.player.pos);
+		v2_add_scale_p(&active_pickup_arr->pos[i], dir, active_pickup_arr->speed[i]);
+		active_pickup_arr->speed[i] += 0.1f;
 	}
 	// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		active pickup move end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -378,12 +376,10 @@ func void update(void)
 	// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		pickup end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 	// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		enemy movement start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-	{
-		for_enemy_partial(i) {
-			if(!enemy_arr->active[i]) { continue; }
-			s_v2 dir = v2_from_to_normalized(enemy_arr->pos[i], g_game.player.pos);
-			v2_add_scale_p(&enemy_arr->pos[i], dir, enemy_arr->speed[i]);
-		}
+	for_enemy_partial(i) {
+		if(!enemy_arr->active[i]) { continue; }
+		s_v2 dir = v2_from_to_normalized(enemy_arr->pos[i], g_game.player.pos);
+		v2_add_scale_p(&enemy_arr->pos[i], dir, enemy_arr->speed[i]);
 	}
 	// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		enemy movement end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
