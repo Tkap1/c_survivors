@@ -2,9 +2,9 @@ VERY incomplete Vampire Survivors clone using C and SDL3.
 
 Run `main.exe` or build it by calling one of:
 
-    	build.bat
-    	build.bat optimized_debug
-    	build.bat release
+	build.bat
+	build.bat optimized_debug
+	build.bat release
 
 WASD movement. Numpad +/- to change game speed
 
